@@ -4,12 +4,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { getCart } from "@/lib/cart";
 import { formatMoney } from "@/lib/money";
 import { CartControls } from "@/components/CartControls";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your cart" };
 
 export default async function CartPage() {
-  const cart = await getCart(await getCurrentUser());
+  const [cart, settings] = await Promise.all([getCart(await getCurrentUser()), getSiteSettings()]);
 
   return (
     <div className="container-page py-10">
@@ -54,6 +55,7 @@ export default async function CartPage() {
               <div className="flex justify-between"><dt className="text-slate-500">Subtotal</dt><dd>{formatMoney(cart.subtotal_cents + cart.discount_cents)}</dd></div>
               {cart.discount_cents > 0 && <div className="flex justify-between text-brand-700"><dt>Promotions</dt><dd>−{formatMoney(cart.discount_cents)}</dd></div>}
               <div className="flex justify-between"><dt className="text-slate-500">Shipping</dt><dd>Calculated at checkout</dd></div>
+              <p className="muted text-xs">Free shipping over {formatMoney(Number(settings.free_shipping_threshold || 0) * 100)}</p>
               <div className="flex justify-between border-t border-slate-200 pt-3 text-base font-bold"><dt>Total</dt><dd>{formatMoney(cart.total_cents)}</dd></div>
             </dl>
             <Link href="/checkout" className="btn-primary mt-6 w-full">Proceed to checkout</Link>

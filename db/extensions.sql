@@ -57,3 +57,10 @@ CREATE TABLE IF NOT EXISTS purchase_order_line (
   CONSTRAINT ck_pol_received CHECK (received_quantity >= 0),
   CONSTRAINT uq_pol_order_variant UNIQUE (purchase_order_id, variant_id)
 );
+
+-- Editable storefront settings, used by the header, footer and home page.
+CREATE TABLE IF NOT EXISTS site_setting (
+  setting_key varchar(100) PRIMARY KEY,
+  setting_value text NOT NULL,
+  updated_at timestamp NOT NULL
+);

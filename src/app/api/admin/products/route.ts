@@ -27,7 +27,10 @@ export async function POST(request: Request) {
         [id, input.sku, toDecimal(toCents(input.price)), input.qty_in_stock],
       );
       if (input.image_url) {
-        await client.query(`INSERT INTO product_image (product_id, variant_id, image_url, sort_order) VALUES ($1,NULL,$2,1)`, [id, input.image_url]);
+        await client.query(
+          `INSERT INTO product_image (product_id, variant_id, image_url, sort_order) VALUES ($1,NULL,$2,1)`,
+          [id, input.image_url],
+        );
       }
       return id;
     });

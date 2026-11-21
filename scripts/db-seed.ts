@@ -308,6 +308,30 @@ async function main() {
       }
     }
 
+    const hasSettings = await client.query<{ exists: boolean }>(
+      `SELECT to_regclass('public.site_setting') IS NOT NULL AS exists`);
+    if (hasSettings.rows[0].exists) {
+      const defaults: [string, string][] = [
+        ["site_name", "Trusted Systems Store"],
+        ["announcement", "Free delivery on orders over KES 20,000 · Nairobi next-day delivery · Secure checkout"],
+        ["hero_title", "Good tech.\nFair prices.\nFast delivery."],
+        ["hero_subtitle", "Discover headphones, smartwatches, keyboards and home essentials from Trusted Systems. Transparent pricing, real stock, and payments you can trust."],
+        ["support_email", "hello@trustedsystems.co.ke"],
+        ["support_phone", "+254700000000"],
+        ["support_hours", "Mon–Sat, 8am–6pm"],
+        ["support_address", "Nairobi, Kenya"],
+        ["footer_note", "Quality everyday tech and home goods, delivered across Kenya with secure payments and local support."],
+        ["free_shipping_threshold", "20000"],
+      ];
+      for (const [key, value] of defaults) {
+        await client.query(
+          `INSERT INTO site_setting (setting_key, setting_value, updated_at) VALUES ($1,$2,now())
+           ON CONFLICT (setting_key) DO NOTHING`,
+          [key, value],
+        );
+      }
+    }
+
     const demoEmail = "demo@trustedsystems.co.ke";
     const demo = await client.query<{ customer_id: number }>(`SELECT customer_id FROM customer WHERE email = $1`, [demoEmail]);
     if (!demo.rows[0]) {

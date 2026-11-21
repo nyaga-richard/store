@@ -23,14 +23,16 @@ interface Props {
   };
   categories: { category_id: number; category_name: string; parent_category_id: number | null }[];
   canDelete?: boolean;
+  imageUrl?: string | null;
 }
 
-export function ProductAdminForm({ product, categories, canDelete = false }: Props) {
+export function ProductAdminForm({ product, categories, canDelete = false, imageUrl = null }: Props) {
   const router = useRouter();
   const [productName, setProductName] = useState(product.product_name);
   const [description, setDescription] = useState(product.description || "");
   const [brand, setBrand] = useState(product.brand || "");
   const [isActive, setIsActive] = useState(product.is_active);
+  const [currentImage, setCurrentImage] = useState(imageUrl);
   const [categoryIds, setCategoryIds] = useState<number[]>(product.category_ids);
   const [variants, setVariants] = useState(product.variants.map((v) => ({ ...v })));
   const [pending, setPending] = useState(false);
@@ -56,6 +58,17 @@ export function ProductAdminForm({ product, categories, canDelete = false }: Pro
     setPending(true);
     setMessage(null);
     try {
+      const formData = new FormData(event.currentTarget as HTMLFormElement);
+      const file = formData.get("image");
+      let uploadedUrl: string | null = null;
+      if (file instanceof File && file.size > 0) {
+        const uploadBody = new FormData();
+        uploadBody.append("file", file);
+        const uploadResponse = await fetch("/api/admin/uploads", { method: "POST", body: uploadBody });
+        const uploadPayload = await uploadResponse.json();
+        if (!uploadResponse.ok || !uploadPayload.ok) throw new Error(uploadPayload.error?.message || "Image upload failed");
+        uploadedUrl = uploadPayload.data.url;
+      }
       const response = await fetch(`/api/admin/products/${product.product_id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -64,12 +77,14 @@ export function ProductAdminForm({ product, categories, canDelete = false }: Pro
           description,
           brand,
           is_active: isActive,
+          image_url: uploadedUrl || currentImage,
           categoryIds,
           variants: variants.map((v) => ({ variant_id: v.variant_id, price: v.price, qty_in_stock: Number(v.qty_in_stock) })),
         }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.ok) throw new Error(payload.error?.message || "Save failed");
+      if (uploadedUrl) setCurrentImage(uploadedUrl);
       setMessage({ ok: true, text: "Product saved." });
       router.refresh();
     } catch (error) {
@@ -86,6 +101,8 @@ export function ProductAdminForm({ product, categories, canDelete = false }: Pro
         <div className="mt-4 grid gap-4">
           <div><label className="label">Product name</label><input className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required /></div>
           <div><label className="label">Brand</label><input className="input" value={brand} onChange={(e) => setBrand(e.target.value)} /></div>
+        <div><label className="label">Replace image</label><input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="input" /></div>
+        {currentImage && <p className="muted">Current image: <span className="break-all">{currentImage}</span></p>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-700" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Visible in storefront (uncheck to remove from store without losing order history)</label>
           <div><label className="label">Description</label><textarea className="input" rows={5} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
         </div>

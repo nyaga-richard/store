@@ -7,6 +7,12 @@ import type { CategoryNode, ProductDetail, ProductListItem, ProductOption, Produ
  * Best active promotion per variant, evaluated entirely in PostgreSQL.
  * Percentage and Fixed discounts are both exact numeric arithmetic.
  */
+/** The same primary image rule is used by the catalogue, cart and order review. */
+export const PRIMARY_IMAGE_SQL = `
+  (SELECT pi.image_url FROM product_image pi
+   WHERE pi.product_id = p.product_id
+   ORDER BY (pi.variant_id IS NOT NULL), pi.sort_order, pi.image_id LIMIT 1)`;
+
 export const EFFECTIVE_CENTS = `
   ROUND(GREATEST(0::numeric, v.price * 100 - COALESCE((
     SELECT MAX(CASE
@@ -80,8 +86,8 @@ export async function listProducts({
      ) vs ON true
      LEFT JOIN LATERAL (
        SELECT pi.image_url FROM product_image pi
-       WHERE pi.product_id = p.product_id AND pi.variant_id IS NULL
-       ORDER BY pi.sort_order, pi.image_id LIMIT 1
+       WHERE pi.product_id = p.product_id
+       ORDER BY (pi.variant_id IS NOT NULL), pi.sort_order, pi.image_id LIMIT 1
      ) img ON true
      WHERE ($1::int[] IS NULL OR cardinality($1::int[]) = 0 OR EXISTS (
          SELECT 1 FROM product_category pc WHERE pc.product_id = p.product_id AND pc.category_id = ANY($1::int[])
@@ -133,8 +139,8 @@ export async function getProduct(productId: number): Promise<ProductDetail | nul
        FROM product_variant v WHERE v.product_id = p.product_id
      ) vs ON true
      LEFT JOIN LATERAL (
-       SELECT pi.image_url FROM product_image pi WHERE pi.product_id = p.product_id AND pi.variant_id IS NULL
-       ORDER BY pi.sort_order, pi.image_id LIMIT 1
+       SELECT pi.image_url FROM product_image pi WHERE pi.product_id = p.product_id
+       ORDER BY (pi.variant_id IS NOT NULL), pi.sort_order, pi.image_id LIMIT 1
      ) img ON true
      WHERE p.product_id = $1 AND p.is_active = true`,
     [productId],

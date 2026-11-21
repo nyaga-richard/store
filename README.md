@@ -159,6 +159,7 @@ The original `db/schema.sql` remains the exact 21-table specification. A second,
 - `product.is_active` — unpublish products without destroying order history.
 - `staff_user` — staff accounts with `owner`, `admin`, `manager` and `staff` roles.
 - `supplier`, `purchase_order`, `purchase_order_line` — supplier purchasing and stock receipts.
+- `site_setting` — editable storefront name, announcement, contact details and delivery copy.
 
 All original tables, columns, foreign keys and constraints are unchanged.
 
@@ -199,3 +200,15 @@ Search and add customers, edit names/email/phone, reset passwords and delete cus
 3. Open the order and click **Receive all into stock**. This transaction locks each variant, adds the outstanding quantity to `qty_in_stock`, marks lines as received and sets the order to `Received`. Cancel is available while the order is `Draft` or `Ordered`.
 
 Purchase costs are stored with exact `decimal` arithmetic. Receiving stock does not alter customer-facing prices.
+
+### Product images
+
+The create and edit forms accept either an image URL or a direct upload (JPG, PNG, WebP or GIF, up to 5 MB). Uploads are type- and magic-byte-checked, stored on the persistent `uploads` Docker volume at `/app/.data/uploads`, and served through `/api/uploads/<filename>` so they keep working after a container rebuild. Catalogue, product detail and cart all use the same primary-image rule, so a cart line shows the main image of the product/variant the customer selected.
+
+### Site settings
+
+`/admin/settings` (owners and admins) edits the store name, announcement bar, home hero copy, support email/phone/address/hours, footer text and free-shipping threshold. Values are stored in the idempotent `site_setting` extension table, seeded with sensible defaults, and applied immediately to the header, footer and home page. The free-shipping threshold is currently informational for storefront copy; checkout still uses the exact shipping-method prices from the schema.
+
+### Cart
+
+Each cart line has an explicit **Remove from cart** control. It removes only that variant for both signed-in customers and guests, with no stock changes; decrementing quantity to zero also removes the line. Cart images use the shared primary-image query from `src/lib/catalog.ts`.

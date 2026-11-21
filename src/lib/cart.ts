@@ -1,5 +1,5 @@
 import "server-only";
-import { EFFECTIVE_CENTS } from "./catalog";
+import { EFFECTIVE_CENTS, PRIMARY_IMAGE_SQL } from "./catalog";
 import { readGuestCart, writeGuestCart, clearGuestCart, type GuestCartLine } from "./cart-cookie";
 import { query, queryOne, withTransaction } from "./db";
 import { ApiError } from "./api";
@@ -31,9 +31,7 @@ export async function getVariantSnapshot(variantId: number): Promise<SnapshotRow
              JOIN product_option po ON po.option_id = vov.option_id
              JOIN product_option_value pov ON pov.option_value_id = vov.option_value_id
              WHERE vov.variant_id = v.variant_id) AS option_summary,
-            (SELECT pi.image_url FROM product_image pi
-             WHERE pi.variant_id = v.variant_id OR pi.variant_id IS NULL
-             ORDER BY (pi.variant_id IS NULL), pi.sort_order, pi.image_id LIMIT 1) AS image_url
+            ${PRIMARY_IMAGE_SQL} AS image_url
      FROM product_variant v JOIN product p ON p.product_id = v.product_id
      WHERE v.variant_id = $1`,
     [variantId],
@@ -54,9 +52,7 @@ async function snapshotRows(variantIds: number[]): Promise<SnapshotRow[]> {
                JOIN product_option po ON po.option_id = vov.option_id
                JOIN product_option_value pov ON pov.option_value_id = vov.option_value_id
                WHERE vov.variant_id = v.variant_id) AS option_summary,
-              (SELECT pi.image_url FROM product_image pi
-               WHERE pi.variant_id = v.variant_id OR pi.variant_id IS NULL
-               ORDER BY (pi.variant_id IS NULL), pi.sort_order, pi.image_id LIMIT 1) AS image_url
+              ${PRIMARY_IMAGE_SQL} AS image_url
        FROM product_variant v JOIN product p ON p.product_id = v.product_id
        WHERE v.variant_id = ANY($1::int[])`,
       [chunk],

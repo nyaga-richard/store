@@ -78,6 +78,10 @@ export const reviewSchema = z.object({
 });
 
 const decimalMoney = z.string().regex(/^\d{1,8}(\.\d{1,2})?$/, "Enter a valid amount (0.00 – 99999999.99)");
+const imageUrlSchema = z.string().trim().refine(
+  (value) => value.startsWith("/api/uploads/") || /^https?:\/\//.test(value),
+  "Enter an http(s) URL or upload an image",
+);
 
 export const adminProductSchema = z.object({
   product_name: z.string().trim().min(2).max(255),
@@ -85,6 +89,7 @@ export const adminProductSchema = z.object({
   brand: z.string().trim().max(100).optional().nullable(),
   categoryIds: z.array(z.number().int().positive()).max(50).optional(),
   is_active: z.boolean().optional(),
+  image_url: imageUrlSchema.optional().nullable(),
   variants: z.array(z.object({
     variant_id: z.number().int().positive(),
     price: decimalMoney,
@@ -177,6 +182,6 @@ export const productCreateSchema = z.object({
   sku: z.string().trim().min(2).max(50),
   price: decimalMoney,
   qty_in_stock: z.number().int().min(0).max(1_000_000),
-  image_url: z.string().trim().url().optional().nullable(),
+  image_url: imageUrlSchema.optional().nullable(),
   is_active: z.boolean().optional(),
 });
