@@ -1,10 +1,16 @@
 import "server-only";
 import { mockProvider } from "./mock";
 import { stripeProvider } from "./stripe";
-import type { PaymentProvider } from "./types";
+import { mpesaProvider } from "./mpesa";
+import { getPaymentSettings } from "../payment-config";
+import type { Gateway, PaymentProvider } from "./types";
 
-export function getPaymentProvider(): PaymentProvider {
-  return process.env.PAYMENT_PROVIDER === "stripe" ? stripeProvider : mockProvider;
+/** Card payments default to Stripe; M-Pesa uses Safaricom Daraja STK push. */
+export async function getPaymentProvider(gateway: Gateway = "card"): Promise<PaymentProvider> {
+  if (gateway === "mpesa") return mpesaProvider;
+  const settings = await getPaymentSettings();
+  return settings.card_provider === "stripe" ? stripeProvider : mockProvider;
 }
 
+export type { Gateway } from "./types";
 export type { PaymentStatus } from "./types";

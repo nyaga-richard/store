@@ -189,7 +189,7 @@ async function main() {
     for (const name of ["Kenya", "Uganda", "Tanzania", "Nigeria", "South Africa", "United Kingdom", "United States", "India"]) {
       await client.query(`INSERT INTO country (country_name) VALUES ($1) ON CONFLICT (country_name) DO NOTHING`, [name]);
     }
-    for (const name of ["Card", "PayPal", "Bank Transfer"]) {
+    for (const name of ["Card", "M-Pesa", "PayPal", "Bank Transfer"]) {
       await client.query(`INSERT INTO payment_type (type_name) VALUES ($1) ON CONFLICT (type_name) DO NOTHING`, [name]);
     }
     for (const [name, price] of [["Standard", "500.00"], ["Express", "1200.00"], ["Store Pickup", "0.00"]] as const) {
@@ -326,6 +326,32 @@ async function main() {
       for (const [key, value] of defaults) {
         await client.query(
           `INSERT INTO site_setting (setting_key, setting_value, updated_at) VALUES ($1,$2,now())
+           ON CONFLICT (setting_key) DO NOTHING`,
+          [key, value],
+        );
+      }
+    }
+
+    const hasGatewaySettings = await client.query<{ exists: boolean }>(
+      `SELECT to_regclass('public.payment_gateway_setting') IS NOT NULL AS exists`);
+    if (hasGatewaySettings.rows[0].exists) {
+      const gatewayDefaults: [string, string][] = [
+        ["card_provider", process.env.PAYMENT_PROVIDER === "stripe" || process.env.STRIPE_SECRET_KEY ? "stripe" : "mock"],
+        ["stripe_enabled", process.env.PAYMENT_PROVIDER === "stripe" || process.env.STRIPE_SECRET_KEY ? "true" : "false"],
+        ["stripe_publishable_key", process.env.STRIPE_PUBLISHABLE_KEY || ""],
+        ["stripe_secret_key", process.env.STRIPE_SECRET_KEY || ""],
+        ["stripe_webhook_secret", process.env.STRIPE_WEBHOOK_SECRET || ""],
+        ["mpesa_enabled", "false"],
+        ["mpesa_consumer_key", process.env.MPESA_CONSUMER_KEY || ""],
+        ["mpesa_consumer_secret", process.env.MPESA_CONSUMER_SECRET || ""],
+        ["mpesa_shortcode", process.env.MPESA_SHORTCODE || ""],
+        ["mpesa_passkey", process.env.MPESA_PASSKEY || ""],
+        ["mpesa_environment", process.env.MPESA_ENVIRONMENT || "sandbox"],
+        ["mpesa_callback_secret", process.env.MPESA_CALLBACK_SECRET || ""],
+      ];
+      for (const [key, value] of gatewayDefaults) {
+        await client.query(
+          `INSERT INTO payment_gateway_setting (setting_key, setting_value, updated_at) VALUES ($1,$2,now())
            ON CONFLICT (setting_key) DO NOTHING`,
           [key, value],
         );

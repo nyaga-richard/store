@@ -6,6 +6,7 @@ import { getCart } from "./cart";
 import { query, queryOne, withTransaction } from "./db";
 import { toCents, toDecimal, percentageDiscount } from "./money";
 import { getPaymentProvider } from "./payments";
+import { normaliseMpesaPhone } from "./payments/mpesa";
 import type { ProviderWebhookEvent } from "./payments/types";
 import type { ShippingMethod } from "./types";
 
@@ -15,6 +16,8 @@ export const STATUS_PAID = 3;
 export const STATUS_CANCELLED = 6;
 
 export interface CheckoutInput {
+  gateway?: "card" | "mpesa";
+  mpesaPhone?: string;
   // Exactly one of addressId or newAddress must be supplied.
   addressId?: number;
   newAddress?: {
@@ -127,6 +130,22 @@ async function resolveAddress(client: PoolClient, user: SessionUser, input: Chec
 }
 
 async function resolvePaymentMethod(client: PoolClient, user: SessionUser, input: CheckoutInput): Promise<number | null> {
+  if (input.gateway === "mpesa") {
+    if (input.paymentMethodId || input.newPaymentToken) {
+      throw new ApiError("Choose either card or M-Pesa, not both", 422, "invalid_gateway_selection");
+    }
+    const phone = input.mpesaPhone ? normaliseMpesaPhone(input.mpesaPhone) : null;
+    if (!phone) throw new ApiError("Enter a valid M-Pesa phone number (e.g. 0712345678)", 422, "invalid_mpesa_phone");
+    const type = await client.query<{ payment_type_id: number }>(
+      `SELECT payment_type_id FROM payment_type WHERE type_name = 'M-Pesa'`);
+    if (!type.rows[0]) throw new ApiError("M-Pesa is not configured", 500, "configuration_error");
+    const result = await client.query<{ payment_method_id: number }>(
+      `INSERT INTO payment_method (customer_id, payment_type_id, provider, provider_token, is_default)
+       VALUES ($1,$2,'M-Pesa',$3,false) RETURNING payment_method_id`,
+      [user.customer_id, type.rows[0].payment_type_id, phone],
+    );
+    return result.rows[0].payment_method_id;
+  }
   if (input.paymentMethodId) {
     const result = await client.query<{ payment_method_id: number }>(
       `SELECT payment_method_id FROM payment_method WHERE payment_method_id = $1 AND customer_id = $2`,
@@ -146,7 +165,7 @@ async function resolvePaymentMethod(client: PoolClient, user: SessionUser, input
     `SELECT COUNT(*)::int AS count FROM payment_method WHERE customer_id = $1`, [user.customer_id]);
   const isDefault = isFirst.rows[0].count === 0;
   if (isDefault) await client.query(`UPDATE payment_method SET is_default = false WHERE customer_id = $1`, [user.customer_id]);
-  const provider = getPaymentProvider().name;
+  const provider = (await getPaymentProvider("card")).name;
   const result = await client.query<{ payment_method_id: number }>(
     `INSERT INTO payment_method
        (customer_id, payment_type_id, provider, provider_token, card_brand, last_four, expiry_month, expiry_year, is_default)
@@ -178,6 +197,14 @@ export async function checkoutQuote(user: SessionUser, shippingMethodId?: number
  * update makes the payment/order state final.
  */
 export async function checkout(user: SessionUser, input: CheckoutInput, key: string) {
+  const gateway = input.gateway ?? "card";
+  const provider = await getPaymentProvider(gateway);
+  if (!(await provider.isConfigured())) {
+    throw new ApiError(
+      gateway === "mpesa" ? "M-Pesa payments are not configured" : "Card payments are not configured",
+      503, "gateway_unavailable",
+    );
+  }
   // Replay protection: an already-processed key returns the original order.
   const placeholders = [`key_${key}`, `mock_${key}`, `failed_${key}`];
   const previous = await queryOne<{ order_id: number }>(
@@ -261,6 +288,9 @@ export async function checkout(user: SessionUser, input: CheckoutInput, key: str
     const paymentMethodId = await resolvePaymentMethod(client, user, input);
     const orderTotal = subtotal - discountTotal + shipping.price_cents;
     if (orderTotal < 0) throw new ApiError("Invalid order total", 500, "invalid_total");
+    if (gateway === "mpesa" && orderTotal % 100 !== 0) {
+      throw new ApiError("M-Pesa accepts whole shillings only. Use a card for this amount.", 422, "mpesa_whole_shillings");
+    }
 
     await client.query(
       `INSERT INTO payment (order_id, payment_method_id, provider_reference, amount, payment_status, created_at)
@@ -283,15 +313,15 @@ export async function checkout(user: SessionUser, input: CheckoutInput, key: str
     return { orderId, amountCents: orderTotal, paymentMethodId };
   });
 
-  const paymentToken = input.paymentMethodId
+  const paymentToken = input.paymentMethodId || gateway === "mpesa"
     ? (await queryOne<{ provider_token: string }>(
         `SELECT provider_token FROM payment_method WHERE payment_method_id = $1 AND customer_id = $2`,
-        [input.paymentMethodId, user.customer_id]))?.provider_token
+        [placed.paymentMethodId, user.customer_id]))?.provider_token
     : input.newPaymentToken!;
 
   if (!paymentToken) throw new ApiError("Payment method not found", 404, "payment_method_not_found");
 
-  const charge = await getPaymentProvider().charge({
+  const charge = await provider.charge({
     orderId: placed.orderId,
     amountCents: placed.amountCents,
     currency: "kes",
@@ -299,6 +329,7 @@ export async function checkout(user: SessionUser, input: CheckoutInput, key: str
     idempotencyKey: key,
     description: `Order #${placed.orderId} — Trusted Systems Store`,
     customerEmail: user.email,
+    customerPhone: gateway === "mpesa" ? paymentToken : undefined,
   });
 
   await settlePayment({
@@ -308,7 +339,12 @@ export async function checkout(user: SessionUser, input: CheckoutInput, key: str
     message: charge.message,
   });
 
-  return { orderId: placed.orderId, status: charge.status === "Succeeded" ? "paid" : charge.status === "Failed" ? "failed" : "pending", message: charge.message };
+  return {
+    orderId: placed.orderId,
+    status: charge.status === "Succeeded" ? "paid" : charge.status === "Failed" ? "failed" : "pending",
+    gateway,
+    message: charge.message,
+  };
 }
 
 type SettleEvent = ProviderWebhookEvent["type"] | "payment.pending";

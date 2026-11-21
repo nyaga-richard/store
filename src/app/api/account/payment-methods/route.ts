@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       await client.query(
         `INSERT INTO payment_method (customer_id, payment_type_id, provider, provider_token, card_brand, last_four, expiry_month, expiry_year, is_default)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [user.customer_id, type.rows[0].payment_type_id, getPaymentProvider().name, input.provider_token,
+        [user.customer_id, type.rows[0].payment_type_id, (await getPaymentProvider()).name, input.provider_token,
           input.card_brand || null, input.last_four || null, input.expiry_month || null, input.expiry_year || null, isDefault],
       );
     });
