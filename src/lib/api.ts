@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ZodError, type ZodType } from "zod";
+import { ZodError, z, type ZodType } from "zod";
 
 export class ApiError extends Error {
   constructor(
@@ -30,7 +30,7 @@ export function fail(error: unknown) {
   return NextResponse.json({ ok: false, error: { message: "Something went wrong. Please try again.", code: "internal_error" } }, { status: 500 });
 }
 
-export async function parseBody<T>(request: Request, schema: ZodType<T>): Promise<T> {
+export async function parseBody<S extends ZodType<any, any, any>>(request: Request, schema: S): Promise<z.infer<S>> {
   const contentType = request.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) throw new ApiError("Expected application/json", 415);
   let json: unknown;

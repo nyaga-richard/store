@@ -47,6 +47,11 @@ if ! grep -q '^TUNNEL_TOKEN=.\+' .env; then
   if [ -n "${TOKEN:-}" ]; then sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=${TOKEN}|" .env; fi
 fi
 
+if ! grep -q '^ADMIN_EMAILS=.\+' .env; then
+  read -r -p "Admin email for /admin (press Enter to configure later): " ADMIN_EMAIL || true
+  if [ -n "${ADMIN_EMAIL:-}" ]; then sed -i "s|^ADMIN_EMAILS=.*|ADMIN_EMAILS=${ADMIN_EMAIL}|" .env; fi
+fi
+
 log "Building images"
 docker compose build
 
@@ -71,3 +76,9 @@ log "Deploy complete"
 echo "Site:    $(grep '^APP_URL=' .env | cut -d= -f2-)"
 echo "Demo:    demo@trustedsystems.co.ke / Demo123!"
 echo "Logs:    docker compose logs -f app cloudflared"
+echo "If Cloudflare returns 502, run ./diagnose.sh and check the tunnel's Public Hostname (HTTP, app:3000)."
+if grep -q '^ADMIN_EMAILS=.\+' .env; then
+  echo "Admin:    $(grep '^ADMIN_EMAILS=' .env | cut -d= -f2-) — create the login with: docker compose run --rm migrate npm run admin:create -- <email> '<password>'"
+else
+  echo "Admin:    set ADMIN_EMAILS in .env to enable /admin"
+fi

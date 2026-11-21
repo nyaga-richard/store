@@ -76,3 +76,52 @@ export const reviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().trim().max(2000).optional(),
 });
+
+const decimalMoney = z.string().regex(/^\d{1,8}(\.\d{1,2})?$/, "Enter a valid amount (0.00 – 99999999.99)");
+
+export const adminProductSchema = z.object({
+  product_name: z.string().trim().min(2).max(255),
+  description: z.string().trim().max(20000).optional().nullable(),
+  brand: z.string().trim().max(100).optional().nullable(),
+  categoryIds: z.array(z.number().int().positive()).max(50).optional(),
+  variants: z.array(z.object({
+    variant_id: z.number().int().positive(),
+    price: decimalMoney,
+    qty_in_stock: z.number().int().min(0).max(1_000_000),
+  })).max(200).optional(),
+});
+
+export const adminOrderStatusSchema = z.object({
+  order_status_id: z.number().int().positive(),
+});
+
+const promotionBase = z.object({
+  promotion_name: z.string().trim().min(2).max(100),
+  description: z.string().trim().max(2000).optional().nullable(),
+  discount_type: z.enum(["Percentage", "Fixed"]),
+  discount_value: decimalMoney.refine((value) => Number(value) > 0, "Discount must be greater than zero"),
+  start_date: z.string().min(1),
+  end_date: z.string().min(1),
+  productIds: z.array(z.number().int().positive()).min(1, "Select at least one product").max(500),
+});
+
+export const promotionSchema = promotionBase.refine(
+  (value) => new Date(value.start_date).getTime() < new Date(value.end_date).getTime(),
+  { message: "End date must be after start date", path: ["end_date"] },
+);
+
+export const promotionUpdateSchema = promotionBase.partial().extend({
+  promotion_id: z.number().int().positive(),
+}).refine(
+  (value) => !value.start_date || !value.end_date || new Date(value.start_date).getTime() < new Date(value.end_date).getTime(),
+  { message: "End date must be after start date", path: ["end_date"] },
+);
+
+export const categorySchema = z.object({
+  category_name: z.string().trim().min(1).max(100),
+  parent_category_id: z.number().int().positive().nullable().optional(),
+});
+
+export const categoryUpdateSchema = categorySchema.extend({
+  category_id: z.number().int().positive(),
+});
