@@ -121,3 +121,30 @@ The app is healthy if `docker compose ps` shows `app` as `Healthy` and `docker c
 4. Test from outside: `curl -i https://shop.trustedsystems.co.ke/api/health` → `HTTP/2 200` with `{"status":"ok","database":true}`.
 
 If you exposed the tunnel token anywhere, rotate it in Zero Trust and replace `TUNNEL_TOKEN` in `.env`.
+
+## Admin dashboard
+
+Access is allowlist-based because the supplied schema has no role column: an account can open `/admin` only when its email is listed in `ADMIN_EMAILS`. Every admin page and API route checks this on the server.
+
+1. Add your email to `.env` (comma-separate multiple emails):
+   ```bash
+   ADMIN_EMAILS=you@example.com
+   ```
+2. Create that customer account (or reset an existing customer's password) and hash the password with scrypt:
+   ```bash
+   docker compose run --rm migrate npm run admin:create -- you@example.com 'StrongPassword123'
+   ```
+3. Recreate the app so it picks up the changed env:
+   ```bash
+   docker compose up -d --force-recreate app
+   ```
+4. Sign in at `/login` with that email, then open `https://shop.trustedsystems.co.ke/admin`.
+
+The dashboard provides:
+- **Overview** — order counts, booked revenue, customers, low-stock variants, active promotions, recent orders.
+- **Products & stock** — search products, edit names/brands/descriptions/categories, and change variant prices and stock levels.
+- **Orders** — filter by status, inspect line items and shipping/payment details, and mark orders Placed, Shipped, Delivered or Cancelled. Cancelling returns stock once and records the payment as refunded; Paid is only set by a confirmed payment event.
+- **Promotions** — create, edit and delete `Percentage` / `Fixed` promotions and their product links.
+- **Categories** — create and rename categories, set top-level parents (cycle protection is enforced).
+
+The seeded demo account is **not** an admin by default. Never expose the admin password or the `ADMIN_EMAILS` list publicly.
