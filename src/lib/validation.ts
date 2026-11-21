@@ -84,6 +84,7 @@ export const adminProductSchema = z.object({
   description: z.string().trim().max(20000).optional().nullable(),
   brand: z.string().trim().max(100).optional().nullable(),
   categoryIds: z.array(z.number().int().positive()).max(50).optional(),
+  is_active: z.boolean().optional(),
   variants: z.array(z.object({
     variant_id: z.number().int().positive(),
     price: decimalMoney,
@@ -124,4 +125,58 @@ export const categorySchema = z.object({
 
 export const categoryUpdateSchema = categorySchema.extend({
   category_id: z.number().int().positive(),
+});
+
+export const adminCustomerSchema = z.object({
+  email: emailSchema,
+  first_name: z.string().trim().min(1).max(100),
+  last_name: z.string().trim().min(1).max(100),
+  phone: z.string().trim().max(30).optional().nullable(),
+  password: passwordSchema.optional(),
+});
+
+export const staffSchema = z.object({
+  email: emailSchema,
+  first_name: z.string().trim().min(1).max(100),
+  last_name: z.string().trim().min(1).max(100),
+  role: z.enum(["owner", "admin", "manager", "staff"]),
+  is_active: z.boolean().optional(),
+  password: passwordSchema.optional(),
+});
+
+export const supplierSchema = z.object({
+  supplier_name: z.string().trim().min(2).max(150),
+  contact_name: z.string().trim().max(100).optional().nullable(),
+  email: emailSchema.optional().nullable(),
+  phone: z.string().trim().max(30).optional().nullable(),
+  address_line1: z.string().trim().max(255).optional().nullable(),
+  city: z.string().trim().max(100).optional().nullable(),
+});
+
+export const purchaseOrderSchema = z.object({
+  supplier_id: z.number().int().positive(),
+  expected_date: z.string().optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
+  lines: z.array(z.object({
+    variant_id: z.number().int().positive(),
+    quantity: z.number().int().positive().max(100_000),
+    unit_cost: decimalMoney,
+  })).min(1, "Add at least one item"),
+});
+
+export const purchaseActionSchema = z.object({
+  purchase_order_id: z.number().int().positive(),
+  action: z.enum(["receive", "cancel"]),
+});
+
+export const productCreateSchema = z.object({
+  product_name: z.string().trim().min(2).max(255),
+  description: z.string().trim().max(20000).optional().nullable(),
+  brand: z.string().trim().max(100).optional().nullable(),
+  categoryIds: z.array(z.number().int().positive()).max(50).optional(),
+  sku: z.string().trim().min(2).max(50),
+  price: decimalMoney,
+  qty_in_stock: z.number().int().min(0).max(1_000_000),
+  image_url: z.string().trim().url().optional().nullable(),
+  is_active: z.boolean().optional(),
 });

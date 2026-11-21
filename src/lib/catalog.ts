@@ -86,6 +86,7 @@ export async function listProducts({
      WHERE ($1::int[] IS NULL OR cardinality($1::int[]) = 0 OR EXISTS (
          SELECT 1 FROM product_category pc WHERE pc.product_id = p.product_id AND pc.category_id = ANY($1::int[])
        ))
+       AND p.is_active = true
        AND ($2 = '' OR p.product_name ILIKE $2 OR p.brand ILIKE $2 OR p.description ILIKE $2)
      ORDER BY ${order}
      LIMIT $3 OFFSET $4`,
@@ -97,6 +98,7 @@ export async function listProducts({
      WHERE ($1::int[] IS NULL OR cardinality($1::int[]) = 0 OR EXISTS (
          SELECT 1 FROM product_category pc WHERE pc.product_id = p.product_id AND pc.category_id = ANY($1::int[])
        ))
+       AND p.is_active = true
        AND ($2 = '' OR p.product_name ILIKE $2 OR p.brand ILIKE $2 OR p.description ILIKE $2)`,
     [categoryIds, `%${search ?? ""}%`],
   );
@@ -134,7 +136,7 @@ export async function getProduct(productId: number): Promise<ProductDetail | nul
        SELECT pi.image_url FROM product_image pi WHERE pi.product_id = p.product_id AND pi.variant_id IS NULL
        ORDER BY pi.sort_order, pi.image_id LIMIT 1
      ) img ON true
-     WHERE p.product_id = $1`,
+     WHERE p.product_id = $1 AND p.is_active = true`,
     [productId],
   );
   if (!product) return null;

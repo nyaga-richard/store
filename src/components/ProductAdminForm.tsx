@@ -17,21 +17,39 @@ interface Props {
     product_name: string;
     description: string | null;
     brand: string | null;
+    is_active: boolean;
     category_ids: number[];
     variants: Variant[];
   };
   categories: { category_id: number; category_name: string; parent_category_id: number | null }[];
+  canDelete?: boolean;
 }
 
-export function ProductAdminForm({ product, categories }: Props) {
+export function ProductAdminForm({ product, categories, canDelete = false }: Props) {
   const router = useRouter();
   const [productName, setProductName] = useState(product.product_name);
   const [description, setDescription] = useState(product.description || "");
   const [brand, setBrand] = useState(product.brand || "");
+  const [isActive, setIsActive] = useState(product.is_active);
   const [categoryIds, setCategoryIds] = useState<number[]>(product.category_ids);
   const [variants, setVariants] = useState(product.variants.map((v) => ({ ...v })));
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function removeProduct() {
+    if (!confirm("Permanently delete this product? Products with order history cannot be deleted.")) return;
+    setPending(true);
+    try {
+      const response = await fetch(`/api/admin/products/${product.product_id}`, { method: "DELETE" });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.error?.message || "Delete failed");
+      router.push("/admin/products");
+      router.refresh();
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "Delete failed" });
+      setPending(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -45,6 +63,7 @@ export function ProductAdminForm({ product, categories }: Props) {
           product_name: productName,
           description,
           brand,
+          is_active: isActive,
           categoryIds,
           variants: variants.map((v) => ({ variant_id: v.variant_id, price: v.price, qty_in_stock: Number(v.qty_in_stock) })),
         }),
@@ -67,6 +86,7 @@ export function ProductAdminForm({ product, categories }: Props) {
         <div className="mt-4 grid gap-4">
           <div><label className="label">Product name</label><input className="input" value={productName} onChange={(e) => setProductName(e.target.value)} required /></div>
           <div><label className="label">Brand</label><input className="input" value={brand} onChange={(e) => setBrand(e.target.value)} /></div>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-700" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Visible in storefront (uncheck to remove from store without losing order history)</label>
           <div><label className="label">Description</label><textarea className="input" rows={5} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
         </div>
         <fieldset className="mt-5">
@@ -107,7 +127,10 @@ export function ProductAdminForm({ product, categories }: Props) {
       </section>
 
       {message && <p className={`text-sm ${message.ok ? "text-brand-700" : "text-red-600"}`}>{message.text}</p>}
-      <button type="submit" disabled={pending} className="btn-primary">{pending ? "Saving..." : "Save product"}</button>
+      <div className="flex flex-wrap gap-3">
+        <button type="submit" disabled={pending} className="btn-primary">{pending ? "Saving..." : "Save product"}</button>
+        {canDelete && <button type="button" disabled={pending} onClick={removeProduct} className="btn-secondary text-red-600">Delete product permanently</button>}
+      </div>
     </form>
   );
 }

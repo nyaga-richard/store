@@ -18,12 +18,13 @@ interface SnapshotRow {
   qty_in_stock: number;
   effective_cents: string;
   image_url: string | null;
+  is_active: boolean;
 }
 
 /** Current, promotion-adjusted price for one variant. */
 export async function getVariantSnapshot(variantId: number): Promise<SnapshotRow | null> {
   return queryOne<SnapshotRow>(
-    `SELECT v.variant_id, v.product_id, v.sku, p.product_name, v.price::text,
+    `SELECT v.variant_id, v.product_id, v.sku, p.product_name, p.is_active, v.price::text,
             v.qty_in_stock, ${EFFECTIVE_CENTS}::text AS effective_cents,
             (SELECT string_agg(pov.value_name, ' / ' ORDER BY po.option_name)
              FROM variant_option_value vov
@@ -46,7 +47,7 @@ async function snapshotRows(variantIds: number[]): Promise<SnapshotRow[]> {
   for (let i = 0; i < variantIds.length; i += 200) {
     const chunk = variantIds.slice(i, i + 200);
     rows.push(...await query<SnapshotRow>(
-      `SELECT v.variant_id, v.product_id, v.sku, p.product_name, v.price::text,
+      `SELECT v.variant_id, v.product_id, v.sku, p.product_name, p.is_active, v.price::text,
               v.qty_in_stock, ${EFFECTIVE_CENTS}::text AS effective_cents,
               (SELECT string_agg(pov.value_name, ' / ' ORDER BY po.option_name)
                FROM variant_option_value vov
@@ -80,6 +81,7 @@ function toCartLine(row: SnapshotRow, quantity: number, orderLineId: number | nu
     discount_cents: Math.max(0, toCents(row.price) - unit),
     line_total_cents: unit * quantity,
     available: row.qty_in_stock,
+    is_active: row.is_active,
   };
 }
 

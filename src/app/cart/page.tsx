@@ -36,6 +36,7 @@ export default async function CartPage() {
                 <div className="min-w-0 flex-1">
                   <Link href={`/products/${line.product_id}`} className="font-semibold hover:underline">{line.product_name}</Link>
                   {line.option_summary && <p className="muted">{line.option_summary}</p>}
+                  {!line.is_active && <p className="text-xs font-semibold text-red-600">No longer available — remove to check out</p>}
                   <p className="muted">SKU: {line.sku}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <CartControls variantId={line.variant_id} quantity={line.quantity} stock={line.available} />

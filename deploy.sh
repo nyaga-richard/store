@@ -80,5 +80,6 @@ echo "If Cloudflare returns 502, run ./diagnose.sh and check the tunnel's Public
 if grep -q '^ADMIN_EMAILS=.\+' .env; then
   echo "Admin:    $(grep '^ADMIN_EMAILS=' .env | cut -d= -f2-) — create the login with: docker compose run --rm migrate npm run admin:create -- <email> '<password>'"
 else
-  echo "Admin:    set ADMIN_EMAILS in .env to enable /admin"
+  echo "Admin:    create a staff login with: docker compose run --rm migrate npm run staff:create -- you@example.com '<password>' owner"
 fi
+echo "Staff UI: $(grep '^APP_URL=' .env | cut -d= -f2-)/staff/login"

@@ -40,6 +40,7 @@ export interface AdminProduct {
   product_id: number;
   product_name: string;
   brand: string | null;
+  is_active: boolean;
   created_at: string;
   variant_count: number;
   min_price: string;
@@ -50,7 +51,7 @@ export interface AdminProduct {
 
 export async function listAdminProducts(search = ""): Promise<AdminProduct[]> {
   const rows = await query<AdminProduct>(
-    `SELECT p.product_id, p.product_name, p.brand, p.created_at::text,
+    `SELECT p.product_id, p.product_name, p.brand, p.is_active, p.created_at::text,
             COUNT(v.variant_id)::int AS variant_count,
             COALESCE(MIN(v.price),0)::text AS min_price,
             COALESCE(SUM(v.qty_in_stock),0)::int AS stock,
@@ -153,4 +154,65 @@ export async function listAdminCategories() {
             (SELECT COUNT(*)::int FROM product_category pc WHERE pc.category_id = c.category_id) AS product_count
      FROM category c ORDER BY c.parent_category_id NULLS FIRST, c.category_name`,
   );
+}
+
+export async function listAdminCustomers(search = "") {
+  return query<{
+    customer_id: number; email: string; first_name: string; last_name: string; phone: string | null;
+    created_at: string; orders: number; spend: string;
+  }>(
+    `SELECT c.customer_id, c.email, c.first_name, c.last_name, c.phone, c.created_at::text,
+            (SELECT COUNT(*)::int FROM customer_order o WHERE o.customer_id = c.customer_id AND o.order_status_id <> 1) AS orders,
+            (SELECT COALESCE(SUM(o.order_total),0)::text FROM customer_order o
+             WHERE o.customer_id = c.customer_id AND o.order_status_id IN (2,3,4,5)) AS spend
+     FROM customer c
+     WHERE $1 = '' OR c.email ILIKE $1 OR c.first_name ILIKE $1 OR c.last_name ILIKE $1
+     ORDER BY c.customer_id DESC`,
+    [`%${search}%`],
+  );
+}
+
+export async function listPurchaseOrders() {
+  return query<{
+    purchase_order_id: number; order_number: string; supplier_name: string; status: string;
+    order_date: string; expected_date: string | null; subtotal: string; line_count: number;
+  }>(
+    `SELECT po.purchase_order_id, po.order_number, s.supplier_name, po.status, po.order_date::text,
+            po.expected_date::text, po.subtotal::text,
+            (SELECT COUNT(*)::int FROM purchase_order_line pol WHERE pol.purchase_order_id = po.purchase_order_id) AS line_count
+     FROM purchase_order po JOIN supplier s ON s.supplier_id = po.supplier_id
+     ORDER BY po.purchase_order_id DESC LIMIT 200`,
+  );
+}
+
+export interface PurchaseDetail {
+  purchase_order_id: number;
+  order_number: string;
+  supplier_name: string;
+  status: string;
+  order_date: string;
+  expected_date: string | null;
+  subtotal: string;
+  notes: string | null;
+  lines: {
+    purchase_order_line_id: number; variant_id: number; sku: string; product_name: string;
+    quantity: number; unit_cost: string; received_quantity: number;
+  }[];
+}
+
+export async function getPurchaseOrder(id: number): Promise<PurchaseDetail | null> {
+  const order = (await query<PurchaseDetail>(
+    `SELECT po.purchase_order_id, po.order_number, s.supplier_name, po.status, po.order_date::text,
+            po.expected_date::text, po.subtotal::text, po.notes
+     FROM purchase_order po JOIN supplier s ON s.supplier_id = po.supplier_id
+     WHERE po.purchase_order_id = $1`, [id]))[0];
+  if (!order) return null;
+  order.lines = await query<PurchaseDetail["lines"][number]>(
+    `SELECT pol.purchase_order_line_id, pol.variant_id, v.sku, p.product_name, pol.quantity,
+            pol.unit_cost::text, pol.received_quantity
+     FROM purchase_order_line pol
+     JOIN product_variant v ON v.variant_id = pol.variant_id
+     JOIN product p ON p.product_id = v.product_id
+     WHERE pol.purchase_order_id = $1 ORDER BY pol.purchase_order_line_id`, [id]);
+  return order;
 }
