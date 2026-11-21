@@ -107,3 +107,17 @@ src/app                  App Router pages and API route handlers
 Dockerfile               deps → builder → standalone runner → migrator
 docker-compose.yml       db, migrate, app, cloudflared, optional app-local
 ```
+
+## Troubleshooting a Cloudflare 502
+
+The app is healthy if `docker compose ps` shows `app` as `Healthy` and `docker compose exec -T app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>console.log(r.status))"` prints `200`. A 502 at the Cloudflare edge then means the tunnel cannot reach the origin. Run `./diagnose.sh` (read-only) and check:
+
+1. Zero Trust → Networks → Tunnels → **your tunnel** → Public Hostname:
+   - Hostname: `shop.trustedsystems.co.ke`
+   - Service Type: **HTTP** (not HTTPS)
+   - URL: **`app:3000`** (not `localhost:3000`, not `127.0.0.1:3000`)
+2. DNS for `shop.trustedsystems.co.ke` is a proxied CNAME to `<tunnel-id>.cfargotunnel.com`, created by that Public Hostname. Remove any manually created A/AAAA record.
+3. `TUNNEL_TOKEN` belongs to that tunnel. After changing it: `docker compose up -d --force-recreate cloudflared`.
+4. Test from outside: `curl -i https://shop.trustedsystems.co.ke/api/health` → `HTTP/2 200` with `{"status":"ok","database":true}`.
+
+If you exposed the tunnel token anywhere, rotate it in Zero Trust and replace `TUNNEL_TOKEN` in `.env`.
