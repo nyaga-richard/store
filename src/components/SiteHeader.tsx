@@ -2,21 +2,24 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { getCategoryTree } from "@/lib/catalog";
 import { getCartCount } from "@/lib/cart";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export async function SiteHeader() {
-  const [categories, user] = await Promise.all([getCategoryTree(), getCurrentUser()]);
+  const [categories, user, settings] = await Promise.all([getCategoryTree(), getCurrentUser(), getSiteSettings()]);
   const cartCount = await getCartCount(user);
   const topLevel = categories.filter((category) => !category.parent_category_id);
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="bg-brand-700 py-1.5 text-center text-xs font-medium text-white">
-        Free delivery on orders over KES 20,000 &nbsp;·&nbsp; Nairobi next-day delivery &nbsp;·&nbsp; Secure checkout
+        {settings.announcement}
       </div>
       <div className="container-page flex h-16 items-center gap-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="Trusted Systems Store home">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-700 text-sm font-black text-white">TS</span>
-          <span className="hidden text-lg font-bold tracking-tight text-slate-900 sm:block">Trusted<span className="text-brand-700">Store</span></span>
+        <Link href="/" className="flex shrink-0 items-center gap-2" aria-label={`${settings.site_name} home`}>
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-700 text-sm font-black text-white">
+            {settings.site_name.split(/\s+/).map((word) => word[0]).slice(0, 2).join("").toUpperCase()}
+          </span>
+          <span className="hidden text-lg font-bold tracking-tight text-slate-900 sm:block">{settings.site_name}</span>
         </Link>
 
         <nav className="hidden items-center gap-5 text-sm font-medium text-slate-700 lg:flex">

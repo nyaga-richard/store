@@ -2,11 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { getCategoryTree, getFeaturedProducts } from "@/lib/catalog";
 import { ProductCard } from "@/components/ProductCard";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [products, categories] = await Promise.all([getFeaturedProducts(8), getCategoryTree()]);
+  const [products, categories, settings] = await Promise.all([getFeaturedProducts(8), getCategoryTree(), getSiteSettings()]);
   const topLevel = categories.filter((category) => !category.parent_category_id);
   const deals = products.filter((product) => product.discount_percent > 0);
 
@@ -16,11 +17,13 @@ export default async function HomePage() {
         <div>
           <span className="badge bg-brand-50 text-brand-700">Kenya-wide delivery · Secure checkout</span>
           <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
-            Good tech.<br /><span className="text-brand-700">Fair prices.</span><br />Fast delivery.
+            {settings.hero_title.split("\n").map((line, index, lines) => (
+              <span key={index} className={index === 1 ? "text-brand-700" : ""}>
+                {line}{index < lines.length - 1 && <br />}
+              </span>
+            ))}
           </h1>
-          <p className="mt-5 max-w-lg text-base text-slate-600 sm:text-lg">
-            Discover headphones, smartwatches, keyboards and home essentials from Trusted Systems. Transparent pricing, real stock, and payments you can trust.
-          </p>
+          <p className="mt-5 max-w-lg text-base text-slate-600 sm:text-lg">{settings.hero_subtitle}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/products" className="btn-primary">Shop all products →</Link>
             <Link href="/products?sort=price-asc" className="btn-secondary">Shop under KES 5,000</Link>

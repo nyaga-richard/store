@@ -24,6 +24,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         [productId, input.product_name, input.description || null, input.brand || null, input.is_active ?? null],
       );
 
+      if (input.image_url) {
+        const updated = await client.query(`UPDATE product_image SET image_url = $2 WHERE product_id = $1 AND variant_id IS NULL`, [productId, input.image_url]);
+        if (updated.rowCount === 0) {
+          await client.query(`INSERT INTO product_image (product_id, variant_id, image_url, sort_order) VALUES ($1,NULL,$2,1)`, [productId, input.image_url]);
+        }
+      }
+
       const categoryIds = [...new Set(input.categoryIds ?? [])];
       await client.query(`DELETE FROM product_category WHERE product_id = $1`, [productId]);
       for (const categoryId of categoryIds) {

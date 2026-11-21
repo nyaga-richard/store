@@ -13,21 +13,15 @@ async function main() {
       `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='customer') AS exists`);
     if (!base.rows[0].exists) throw new Error("Base schema is missing — run db:migrate first");
 
-    const applied = await client.query<{ exists: boolean }>(
-      `SELECT EXISTS(SELECT 1 FROM information_schema.columns
-        WHERE table_schema='public' AND table_name='product' AND column_name='is_active') AS exists`);
-    if (applied.rows[0].exists) {
-      console.log("Backoffice extensions already present — skipping.");
-      return;
-    }
-
+    // Every statement in extensions.sql is IF NOT EXISTS / ADD COLUMN IF NOT EXISTS,
+    // so re-running on every deploy also adds newly introduced settings tables.
     const sql = readFileSync(resolve(process.cwd(), "db/extensions.sql"), "utf8");
-    console.log("Applying backoffice/purchasing extensions from db/extensions.sql ...");
+    console.log("Verifying/applying backoffice extensions from db/extensions.sql ...");
     await client.query("BEGIN");
     try {
       await client.query(sql);
       await client.query("COMMIT");
-      console.log("Extensions applied: product.is_active, staff_user, supplier, purchase_order, purchase_order_line.");
+      console.log("Extensions verified: product.is_active, staff, suppliers, purchases, site settings.");
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

@@ -28,6 +28,26 @@ export function CartControls({ variantId, quantity, stock }: { variantId: number
     }
   }
 
+  async function remove() {
+    if (!window.confirm("Remove this item from your cart?")) return;
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/cart", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variantId }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.error?.message || "Could not remove item");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center rounded-lg border border-slate-300 text-sm">
@@ -35,6 +55,8 @@ export function CartControls({ variantId, quantity, stock }: { variantId: number
         <span className="w-7 text-center font-semibold">{quantity}</span>
         <button type="button" disabled={pending || quantity >= Math.min(99, stock)} className="px-2.5 py-1.5" onClick={() => update(quantity + 1)} aria-label="Increase quantity">+</button>
       </div>
+      <button type="button" disabled={pending} onClick={remove}
+        className="text-xs font-semibold text-red-600 hover:underline" aria-label="Remove from cart">Remove from cart</button>
       {quantity > stock && <span className="text-xs text-red-600">Only {stock} in stock</span>}
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>

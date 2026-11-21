@@ -19,13 +19,24 @@ export function ProductCreateForm({ categories }: {
     setPending(true);
     setMessage("");
     try {
+      const formData = new FormData(event.currentTarget as HTMLFormElement);
+      const file = formData.get("image");
+      let imageUrl = form.image_url || null;
+      if (file instanceof File && file.size > 0) {
+        const uploadBody = new FormData();
+        uploadBody.append("file", file);
+        const uploadResponse = await fetch("/api/admin/uploads", { method: "POST", body: uploadBody });
+        const uploadPayload = await uploadResponse.json();
+        if (!uploadResponse.ok || !uploadPayload.ok) throw new Error(uploadPayload.error?.message || "Image upload failed");
+        imageUrl = uploadPayload.data.url;
+      }
       const response = await fetch("/api/admin/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
           qty_in_stock: Number(form.qty_in_stock),
-          image_url: form.image_url || null,
+          image_url: imageUrl,
         }),
       });
       const payload = await response.json();
@@ -44,7 +55,8 @@ export function ProductCreateForm({ categories }: {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><label className="label">Product name</label><input required className="input" value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} /></div>
         <div><label className="label">Brand</label><input className="input" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></div>
-        <div><label className="label">Main image URL</label><input className="input" value={form.image_url} placeholder="https://..." onChange={(e) => setForm({ ...form, image_url: e.target.value })} /></div>
+        <div><label className="label">Or image URL</label><input className="input" value={form.image_url} placeholder="https://..." onChange={(e) => setForm({ ...form, image_url: e.target.value })} /></div>
+        <div className="sm:col-span-2"><label className="label">Upload product image (JPG, PNG, WebP or GIF, max 5 MB)</label><input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="input" /></div>
         <div className="sm:col-span-2"><label className="label">Description</label><textarea rows={4} className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
         <div><label className="label">First SKU</label><input required className="input" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} /></div>
         <div><label className="label">Price (KES)</label><input required className="input" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></div>

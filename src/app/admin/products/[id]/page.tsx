@@ -21,7 +21,7 @@ export default async function AdminProductPage({ params }: { params: Promise<{ i
     <div>
       <Link href="/admin/products" className="link text-sm">← Products</Link>
       <div className="mb-6 mt-3"><h2 className="text-xl font-bold">{product.product_name}</h2><p className="muted">SKU count: {product.variant_count}</p></div>
-      <ProductAdminForm product={product} categories={categories} canDelete={user?.role === "owner" || user?.role === "admin"} />
+      <ProductAdminForm product={product} categories={categories} imageUrl={product.image_url} canDelete={user?.role === "owner" || user?.role === "admin"} />
     </div>
   );
 }

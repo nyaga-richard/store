@@ -44,6 +44,8 @@ services:
         condition: service_completed_successfully
     expose:
       - "3000"
+    volumes:
+      - uploads:/app/.data/uploads
     restart: unless-stopped
     networks: [storenet]
 
@@ -71,6 +73,8 @@ services:
     profiles: ["local"]
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      - uploads:/app/.data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -78,6 +82,7 @@ services:
 
 volumes:
   pgdata:
+  uploads:
 
 networks:
   storenet:

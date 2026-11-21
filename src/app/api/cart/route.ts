@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { fail, ok, parseBody } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 import { addToCart, clearCart, getCart, updateCartLine } from "@/lib/cart";
@@ -33,9 +34,16 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
-    await clearCart(await getCurrentUser());
+    const user = await getCurrentUser();
+    const body = await request.json().catch(() => null);
+    const parsed = z.object({ variantId: z.number().int().positive() }).safeParse(body);
+    if (parsed.success) {
+      await updateCartLine(user, parsed.data.variantId, 0);
+      return ok({ cart: await getCart(user) });
+    }
+    await clearCart(user);
     return ok({ cart: await getCart(await getCurrentUser()) });
   } catch (error) {
     return fail(error);
