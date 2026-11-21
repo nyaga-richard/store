@@ -66,6 +66,7 @@ export interface CartLine {
   discount_cents: number;
   line_total_cents: number;
   available: number;
+  is_active: boolean;
 }
 
 export interface CartView {

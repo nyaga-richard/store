@@ -9,8 +9,10 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/db-seed.ts",
-    "db:setup": "tsx scripts/db-migrate.ts && tsx scripts/db-seed.ts",
-    "admin:create": "tsx scripts/create-admin.ts"
+    "db:setup": "tsx scripts/db-migrate.ts && tsx scripts/db-migrate-extensions.ts && tsx scripts/db-seed.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
+    "db:migrate:extensions": "tsx scripts/db-migrate-extensions.ts",
+    "staff:create": "tsx scripts/create-staff.ts"
   },
   "dependencies": {
     "next": "15.5.29",

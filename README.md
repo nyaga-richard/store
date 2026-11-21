@@ -93,9 +93,12 @@ npm run build                           # production build
 ## Project layout
 
 ```
-db/schema.sql            exact PostgreSQL schema
-scripts/db-migrate.ts    advisory-locked, non-destructive migration runner
-scripts/db-seed.ts       idempotent lookup data, catalogue, promotions, demo account
+db/schema.sql            exact PostgreSQL schema (unchanged)
+db/extensions.sql        idempotent staff/supplier/purchase + product.is_active extension
+scripts/db-migrate.ts    advisory-locked, non-destructive base migration
+scripts/db-migrate-extensions.ts  idempotent extension migration
+scripts/db-seed.ts       idempotent lookup data, catalogue, promotions, suppliers, demo account
+scripts/create-staff.ts  bootstrap owner/admin/manager/staff accounts
 src/lib/db.ts            pg.Pool + withTransaction helper
 src/lib/money.ts         integer-cent decimal arithmetic
 src/lib/auth.ts          scrypt hashing + signed session cookies
@@ -148,3 +151,51 @@ The dashboard provides:
 - **Categories** — create and rename categories, set top-level parents (cycle protection is enforced).
 
 The seeded demo account is **not** an admin by default. Never expose the admin password or the `ADMIN_EMAILS` list publicly.
+
+## Extended backoffice workflow
+
+The original `db/schema.sql` remains the exact 21-table specification. A second, idempotent migration `db/extensions.sql` is applied by `npm run db:setup` (and therefore by `deploy.sh` / `update.sh`). It adds:
+
+- `product.is_active` — unpublish products without destroying order history.
+- `staff_user` — staff accounts with `owner`, `admin`, `manager` and `staff` roles.
+- `supplier`, `purchase_order`, `purchase_order_line` — supplier purchasing and stock receipts.
+
+All original tables, columns, foreign keys and constraints are unchanged.
+
+### Staff accounts and roles
+
+Backoffice access accepts either an `ADMIN_EMAILS` customer (treated as owner) or a staff account from `/staff/login`.
+
+```bash
+docker compose run --rm migrate npm run staff:create -- owner@example.com 'StrongPassword123' owner
+docker compose run --rm migrate npm run staff:create -- manager@example.com 'StrongPassword123' manager
+```
+
+| Capability | owner | admin | manager | staff |
+| --- | --- | --- | --- | --- |
+| View dashboard / orders | ✓ | ✓ | ✓ | ✓ |
+| Products, promotions, categories | ✓ | ✓ | ✓ | ✓ |
+| Customers, suppliers, purchases | ✓ | ✓ | ✓ | — |
+| Manage staff | ✓ | ✓ | — | — |
+| Delete staff, grant owner, delete products/customers/suppliers | ✓ | — | — | — |
+
+The last active owner cannot be demoted, disabled or deleted, and nobody can disable or change their own role.
+
+### Product lifecycle
+
+- **Create:** `/admin/products/new` creates the product, first variant, category links and optional image in one transaction.
+- **Edit:** change name, brand, description, categories, variant prices and stock levels.
+- **Remove from store:** uncheck “Visible in storefront”. Hidden products disappear from the catalogue and product pages, and checkout rejects any hidden item already in a cart. Order history is preserved and the product can be restored.
+- **Delete permanently:** only for products with no placed-order history. The API refuses deletion once the product has sold, so the financial trail stays intact.
+
+### Customers
+
+Search and add customers, edit names/email/phone, reset passwords and delete customers who have no order history. Customers with orders cannot be deleted; their history remains intact.
+
+### Suppliers and purchases
+
+1. Add a supplier under `/admin/suppliers` (a few sample suppliers are seeded).
+2. Open `/admin/purchases`, choose the supplier, add one or more variants with quantities and unit costs, and create the purchase order.
+3. Open the order and click **Receive all into stock**. This transaction locks each variant, adds the outstanding quantity to `qty_in_stock`, marks lines as received and sets the order to `Received`. Cancel is available while the order is `Draft` or `Ordered`.
+
+Purchase costs are stored with exact `decimal` arithmetic. Receiving stock does not alter customer-facing prices.

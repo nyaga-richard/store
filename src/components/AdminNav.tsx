@@ -9,9 +9,14 @@ const links = [
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/promotions", label: "Promotions" },
   { href: "/admin/categories", label: "Categories" },
+  { href: "/admin/products/new", label: "Add product" },
+  { href: "/admin/customers", label: "Customers" },
+  { href: "/admin/suppliers", label: "Suppliers" },
+  { href: "/admin/purchases", label: "Purchases" },
+  { href: "/admin/staff", label: "Staff & roles" },
 ];
 
-export function AdminNav({ email }: { email: string }) {
+export function AdminNav({ email, displayName, role }: { email: string; displayName: string; role: string }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -23,11 +28,13 @@ export function AdminNav({ email }: { email: string }) {
 
   return (
     <aside className="card h-fit p-4 lg:w-60">
-      <p className="px-3 pb-1 text-xs uppercase tracking-wide text-slate-400">Signed in as admin</p>
-      <p className="break-all px-3 pb-4 text-xs font-semibold">{email}</p>
+      <p className="px-3 pb-1 text-xs uppercase tracking-wide text-slate-400">Signed in as {displayName}</p>
+      <p className="break-all px-3 pb-1 text-xs font-semibold">{email}</p>
+      <p className="px-3 pb-4 text-xs text-slate-400">Role: {role}</p>
       <nav className="space-y-1">
         {links.map((link) => {
           const active = link.exact ? pathname === link.href : pathname.startsWith(link.href);
+          if (link.href === "/admin/staff" && !["owner", "admin"].includes(role)) return null;
           return (
             <Link key={link.href} href={link.href}
               className={`block rounded-lg px-3 py-2 text-sm ${active ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-600 hover:bg-slate-50"}`}>

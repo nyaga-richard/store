@@ -46,6 +46,7 @@ interface LockedLine {
   option_summary: string | null;
   price: string;
   qty_in_stock: number;
+  is_active: boolean;
 }
 
 interface PromotionRow {
@@ -198,7 +199,7 @@ export async function checkout(user: SessionUser, input: CheckoutInput, key: str
     // Lock cart lines and variants in a deterministic order to avoid deadlocks.
     const linesResult = await client.query<LockedLine>(
       `SELECT ol.order_line_id, ol.variant_id, ol.quantity, v.product_id, p.product_name, ol.sku,
-              ol.option_summary, v.price::text, v.qty_in_stock
+              ol.option_summary, p.is_active, v.price::text, v.qty_in_stock
        FROM order_line ol
        JOIN product_variant v ON v.variant_id = ol.variant_id
        JOIN product p ON p.product_id = v.product_id
@@ -227,6 +228,7 @@ export async function checkout(user: SessionUser, input: CheckoutInput, key: str
     let subtotal = 0;
     let discountTotal = 0;
     for (const line of lines) {
+      if (!line.is_active) throw new ApiError("A product in your cart is no longer available", 409, "product_unavailable");
       if (!Number.isInteger(line.quantity) || line.quantity < 1) {
         throw new ApiError("Invalid quantity in cart", 409, "invalid_cart");
       }

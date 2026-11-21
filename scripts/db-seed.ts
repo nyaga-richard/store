@@ -292,6 +292,22 @@ async function main() {
       }
     }
 
+    const hasSuppliers = await client.query<{ exists: boolean }>(
+      `SELECT to_regclass('public.supplier') IS NOT NULL AS exists`);
+    if (hasSuppliers.rows[0].exists) {
+      for (const [name, contact, email, phone, city] of [
+        ["Nairobi Tech Supplies", "Peter Kamau", "sales@nairobitech.co.ke", "+254722000111", "Nairobi"],
+        ["Lake Region Electronics", "Achieng Otieno", "orders@lakeregion.co.ke", "+254733000222", "Kisumu"],
+        ["Coast Home Goods", "Salim Hassan", "supply@coasthome.co.ke", "+254744000333", "Mombasa"],
+      ]) {
+        await client.query(
+          `INSERT INTO supplier (supplier_name, contact_name, email, phone, city, created_at)
+           VALUES ($1,$2,$3,$4,$5,now()) ON CONFLICT (supplier_name) DO NOTHING`,
+          [name, contact, email, phone, city],
+        );
+      }
+    }
+
     const demoEmail = "demo@trustedsystems.co.ke";
     const demo = await client.query<{ customer_id: number }>(`SELECT customer_id FROM customer WHERE email = $1`, [demoEmail]);
     if (!demo.rows[0]) {

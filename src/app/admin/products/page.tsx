@@ -28,7 +28,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
             {products.map((product) => (
               <tr key={product.product_id} className="hover:bg-slate-50">
                 <td className="px-5 py-3">
-                  <p className="font-semibold">{product.product_name}</p>
+                  <p className="font-semibold">{product.product_name} {!product.is_active && <span className="badge ml-2 bg-slate-100 text-slate-500">Hidden</span>}</p>
                   <p className="muted">{product.brand || "—"}</p>
                 </td>
                 <td className="px-5 py-3">{product.variant_count}</td>
