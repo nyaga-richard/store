@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatMoney } from "@/lib/money";
 import type { Address, Country, PaymentMethodView, ShippingMethod } from "@/lib/types";
+import { StripeCardEntry, type StripeCardHandle } from "./StripeCardEntry";
 
 interface Props {
   addresses: Address[];
@@ -14,11 +15,12 @@ interface Props {
   cart: { lines: { product_name: string; quantity: number; unit_price_cents: number; discount_cents: number }[]; subtotal_cents: number; discount_cents: number; total_cents: number };
   userName: string;
   provider: string;
+  paymentConfig: { provider: string; cardEnabled: boolean; stripePublishableKey: string; mpesaEnabled: boolean };
 }
 
 const steps = ["Shipping", "Delivery", "Payment"] as const;
 
-export function CheckoutForm({ addresses, paymentMethods, shippingMethods, countries, cart, userName, provider }: Props) {
+export function CheckoutForm({ addresses, paymentMethods, shippingMethods, countries, cart, userName, provider, paymentConfig }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [addressId, setAddressId] = useState(addresses.find((a) => a.is_default)?.address_id ?? addresses[0]?.address_id ?? 0);
@@ -26,6 +28,9 @@ export function CheckoutForm({ addresses, paymentMethods, shippingMethods, count
   const [shippingId, setShippingId] = useState(shippingMethods[0]?.shipping_method_id ?? 0);
   const [paymentId, setPaymentId] = useState(paymentMethods.find((m) => m.is_default)?.payment_method_id ?? paymentMethods[0]?.payment_method_id ?? 0);
   const [useNewCard, setUseNewCard] = useState(false);
+  const [gateway, setGateway] = useState<"card" | "mpesa">(paymentConfig.mpesaEnabled && !paymentConfig.cardEnabled ? "mpesa" : "card");
+  const [mpesaPhone, setMpesaPhone] = useState("");
+  const cardRef = useRef<StripeCardHandle>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,7 +39,7 @@ export function CheckoutForm({ addresses, paymentMethods, shippingMethods, count
     country_id: countries.find((c) => c.country_name === "Kenya")?.country_id ?? countries[0]?.country_id ?? 0,
     is_default: true,
   });
-  const [newCard, setNewCard] = useState({ provider_token: "", card_brand: "", last_four: "", expiry_month: "", expiry_year: "" });
+  const [newCard, setNewCard] = useState({ provider_token: "" });
 
   const shipping = useMemo(() => shippingMethods.find((m) => m.shipping_method_id === shippingId), [shippingId, shippingMethods]);
   const total = cart.total_cents + (shipping?.price_cents ?? 0);
@@ -43,6 +48,10 @@ export function CheckoutForm({ addresses, paymentMethods, shippingMethods, count
     if (step === 0 && !useNewAddress && !addressId) { setError("Choose or add a shipping address"); return; }
     if (step === 0 && useNewAddress && (!newAddress.address_line1 || !newAddress.city)) { setError("Fill in the required address fields"); return; }
     if (step === 1 && !shippingId) { setError("Choose a delivery method"); return; }
+    if (step === 2 && gateway === "mpesa" && !/^(?:\+?254|0)?7\d{8}$/.test(mpesaPhone.trim())) {
+      setError("Enter a valid M-Pesa phone number"); return;
+    }
+    if (step === 2 && gateway === "card" && !useNewCard && !paymentId) { setError("Choose a card or add a new one"); return; }
     setError("");
     setStep((current) => Math.min(2, current + 1));
   }
@@ -62,13 +71,25 @@ export function CheckoutForm({ addresses, paymentMethods, shippingMethods, count
       };
       if (useNewAddress) body.newAddress = { ...newAddress, country_id: Number(newAddress.country_id), is_default: newAddress.is_default };
       else body.addressId = Number(addressId);
-      if (useNewCard) {
-        body.newPaymentToken = newCard.provider_token.trim();
-        if (newCard.card_brand) body.cardBrand = newCard.card_brand;
-        if (/^\d{4}$/.test(newCard.last_four)) body.lastFour = newCard.last_four;
-        if (newCard.expiry_month) body.expiryMonth = Number(newCard.expiry_month);
-        if (newCard.expiry_year) body.expiryYear = Number(newCard.expiry_year);
-      } else body.paymentMethodId = Number(paymentId);
+      if (gateway === "mpesa") {
+        body.gateway = "mpesa";
+        body.mpesaPhone = mpesaPhone.trim();
+      } else {
+        body.gateway = "card";
+        if (useNewCard) {
+          if (provider === "Stripe") {
+            const card = await cardRef.current?.tokenize();
+            if (!card) throw new Error("Enter your card details in the secure Stripe field");
+            body.newPaymentToken = card.id;
+            body.cardBrand = card.brand;
+            body.lastFour = card.last4;
+            body.expiryMonth = card.expMonth;
+            body.expiryYear = card.expYear;
+          } else {
+            body.newPaymentToken = newCard.provider_token.trim();
+          }
+        } else body.paymentMethodId = Number(paymentId);
+      }
 
       const response = await fetch("/api/checkout", {
         method: "POST",
@@ -78,7 +99,7 @@ export function CheckoutForm({ addresses, paymentMethods, shippingMethods, count
       const payload = await response.json();
       if (!response.ok || !payload.ok) throw new Error(payload.error?.message || "Checkout failed");
       sessionStorage.removeItem("ts_checkout_key");
-      router.push(`/account/orders/${payload.data.orderId}?new=1`);
+      router.push(`/account/orders/${payload.data.orderId}?new=1${gateway === "mpesa" ? "&gateway=mpesa" : ""}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -165,37 +186,66 @@ export function CheckoutForm({ addresses, paymentMethods, shippingMethods, count
           {step === 2 && (
             <div>
               <h2 className="text-lg font-bold">Payment method</h2>
-              <p className="muted mb-4">Provider: {provider}. Only provider tokens are stored — never card numbers.</p>
-              {paymentMethods.length > 0 && (
-                <div className="space-y-2">
-                  {paymentMethods.map((method) => (
-                    <label key={method.payment_method_id} className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 ${!useNewCard && paymentId === method.payment_method_id ? "border-brand-600 bg-brand-50" : "border-slate-200"}`}>
-                      <span className="flex items-center gap-3 text-sm font-medium">
-                        <input type="radio" name="payment" checked={!useNewCard && paymentId === method.payment_method_id}
-                          onChange={() => { setPaymentId(method.payment_method_id); setUseNewCard(false); }} className="accent-brand-700" />
-                        {method.card_brand || "Card"} •••• {method.last_four || "----"}
-                      </span>
-                      {method.is_default && <span className="badge bg-white text-slate-500">Default</span>}
-                    </label>
-                  ))}
+              <p className="muted mb-4">Only provider tokens are stored — never card numbers.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${gateway === "card" ? "border-brand-600 bg-brand-50" : "border-slate-200"} ${!paymentConfig.cardEnabled ? "opacity-50" : ""}`}>
+                  <input type="radio" name="gateway" checked={gateway === "card"} disabled={!paymentConfig.cardEnabled}
+                    onChange={() => setGateway("card")} className="mt-1 accent-brand-700" />
+                  <span className="text-sm"><strong>Card</strong><span className="muted block">{paymentConfig.provider === "Stripe" ? "Secure Stripe card field" : "Demo card token"}</span></span>
+                </label>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${gateway === "mpesa" ? "border-brand-600 bg-brand-50" : "border-slate-200"} ${!paymentConfig.mpesaEnabled ? "opacity-50" : ""}`}>
+                  <input type="radio" name="gateway" checked={gateway === "mpesa"} disabled={!paymentConfig.mpesaEnabled}
+                    onChange={() => setGateway("mpesa")} className="mt-1 accent-brand-700" />
+                  <span className="text-sm"><strong>M-Pesa</strong><span className="muted block">STK push to your phone</span></span>
+                </label>
+              </div>
+
+              {gateway === "card" && (
+                <div className="mt-5">
+                  {paymentMethods.filter((method) => method.type_name === "Card").length > 0 && (
+                    <div className="space-y-2">
+                      {paymentMethods.filter((method) => method.type_name === "Card").map((method) => (
+                        <label key={method.payment_method_id} className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 ${!useNewCard && paymentId === method.payment_method_id ? "border-brand-600 bg-brand-50" : "border-slate-200"}`}>
+                          <span className="flex items-center gap-3 text-sm font-medium">
+                            <input type="radio" name="payment" checked={!useNewCard && paymentId === method.payment_method_id}
+                              onChange={() => { setPaymentId(method.payment_method_id); setUseNewCard(false); }} className="accent-brand-700" />
+                            {method.card_brand || "Card"} •••• {method.last_four || "----"}
+                          </span>
+                          {method.is_default && <span className="badge bg-white text-slate-500">Default</span>}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm">
+                    <input type="checkbox" checked={useNewCard} onChange={(event) => setUseNewCard(event.target.checked)} className="accent-brand-700" />
+                    Add a new card
+                  </label>
+                  {useNewCard && (
+                    <div className="mt-3 rounded-xl border border-slate-200 p-4">
+                      {provider === "Stripe" ? (
+                        <>
+                          <StripeCardEntry ref={cardRef} publishableKey={paymentConfig.stripePublishableKey} name={userName} />
+                          <p className="muted mt-2 text-xs">Enter only your card number, expiry and CVC. Stripe handles them directly.</p>
+                        </>
+                      ) : (
+                        <>
+                          <label className="label">Demo provider token</label>
+                          <input className="input" placeholder="tok_demo_4242" value={newCard.provider_token}
+                            onChange={(e) => setNewCard({ ...newCard, provider_token: e.target.value })} />
+                          <p className="muted mt-1">Demo mode only — no real card is charged.</p>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
-              <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={useNewCard} onChange={(event) => setUseNewCard(event.target.checked)} className="accent-brand-700" />
-                Add a new tokenised card
-              </label>
-              {useNewCard && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="label">Payment provider token</label>
-                    <input className="input" placeholder={provider === "Stripe" ? "pm_..." : "tok_demo_4242"} value={newCard.provider_token}
-                      onChange={(e) => setNewCard({ ...newCard, provider_token: e.target.value })} />
-                    <p className="muted mt-1">In demo mode use <code>tok_demo_4242</code>. With Stripe, use a token generated by Stripe.js.</p>
-                  </div>
-                  <div><label className="label">Card brand</label><input className="input" placeholder="Visa" value={newCard.card_brand} onChange={(e) => setNewCard({ ...newCard, card_brand: e.target.value })} /></div>
-                  <div><label className="label">Last four digits</label><input className="input" maxLength={4} placeholder="4242" value={newCard.last_four} onChange={(e) => setNewCard({ ...newCard, last_four: e.target.value })} /></div>
-                  <div><label className="label">Expiry month</label><input className="input" type="number" min={1} max={12} value={newCard.expiry_month} onChange={(e) => setNewCard({ ...newCard, expiry_month: e.target.value })} /></div>
-                  <div><label className="label">Expiry year</label><input className="input" type="number" min={2024} value={newCard.expiry_year} onChange={(e) => setNewCard({ ...newCard, expiry_year: e.target.value })} /></div>
+
+              {gateway === "mpesa" && (
+                <div className="mt-5">
+                  <label className="label" htmlFor="mpesa-phone">M-Pesa phone number</label>
+                  <input id="mpesa-phone" className="input" inputMode="tel" placeholder="0712345678" value={mpesaPhone}
+                    onChange={(e) => setMpesaPhone(e.target.value)} />
+                  <p className="muted mt-2 text-sm">You&apos;ll receive an STK push on this number. Enter your M-Pesa PIN on your phone to complete payment.</p>
                 </div>
               )}
               <p className="muted mt-4">🔒 Payments are idempotent: retrying this step cannot charge you twice.</p>

@@ -21,7 +21,7 @@ async function main() {
     try {
       await client.query(sql);
       await client.query("COMMIT");
-      console.log("Extensions verified: product.is_active, staff, suppliers, purchases, site settings.");
+      console.log("Extensions verified: product.is_active, staff, suppliers, purchases, site settings and payment settings.");
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

@@ -8,7 +8,7 @@ Production-grade eCommerce app for **shop.trustedsystems.co.ke** — Next.js 15 
 - **Cart & checkout:** guest cart in a signed HttpOnly cookie, merged into the database cart on login; multi-step checkout; one active cart per customer enforced by the exact schema's partial unique index.
 - **Money:** every price is `decimal(10,2)` in PostgreSQL and all arithmetic is done in integer cents on the server. No floating point is used for totals.
 - **Transactional checkout:** one ACID transaction locks cart lines and variants `FOR UPDATE`, re-prices from the database, applies active promotions (`Percentage` / `Fixed` via `promotion_product`), conditionally decrements stock, snapshots product name, SKU, option summary, unit price and discount onto `order_line`, copies shipping address + method price onto `customer_order`, and writes the payment row before committing. The charge happens after commit; webhooks finalise the state idempotently.
-- **Payments:** provider interface with Stripe and a signed mock provider. Only `provider_token` is stored — never card numbers. Idempotency keys are required on checkout and forwarded to Stripe.
+- **Payments:** admin-configurable Stripe card checkout (customers enter card details only in Stripe's own card field) plus M-Pesa STK push. Only provider tokens are stored — never card numbers. Idempotency keys are required on checkout and forwarded to Stripe.
 - **Accounts:** scrypt password hashes, signed session cookies (Secure behind Cloudflare), profile, addresses, tokenised payment methods, order history and one review per purchased order line (rating 1–5).
 - **Ops:** multi-stage standalone Dockerfile, `docker-compose.yml` (Postgres + migrator + app + cloudflared), `deploy.sh`, `update.sh`, idempotent `db/schema.sql` + seed, `/api/health`.
 
@@ -55,14 +55,15 @@ chmod +x update.sh && ./update.sh
 
 The app reads `X-Forwarded-Proto` and `X-Forwarded-Host` for cookies, redirects and metadata, so HTTPS works correctly behind the tunnel. PostgreSQL is never published; only cloudflared makes an outbound connection.
 
-### Stripe (production payments)
+### Payment configuration
 
-1. Set `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY=sk_...` and `STRIPE_WEBHOOK_SECRET=whsec_...` in `.env`.
-2. Add webhook endpoint `https://shop.trustedsystems.co.ke/api/payments/webhook` for:
-   `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`.
-3. Generate `pm_...` payment-method tokens with Stripe.js on the client (the checkout form accepts the token; no raw card data touches this app). For local demos, leave `PAYMENT_PROVIDER=mock` and use `tok_demo_4242`.
+Owners and admins configure gateways in `/admin/payments`. Values entered there override the `.env` seed values without a rebuild. Secret keys are masked in the UI and never sent to the browser; only the Stripe publishable key and the enabled flags are public via `/api/payments/config`.
 
-The currency code in `src/lib/checkout.ts` is `kes` (KES). If your Stripe account presents a different currency, change the `currency` value in that one place.
+**Stripe cards:** set Card provider to `Stripe`, enable it, and enter the publishable key, secret key and webhook secret. Customers see Stripe's hosted card field and enter only card number, expiry and CVC — the app receives just a `pm_...` token. No card brand/last-four/expiry fields are filled in by the customer. Register the webhook `https://shop.trustedsystems.co.ke/api/payments/webhook` for `payment_intent.succeeded`, `payment_intent.payment_failed` and `charge.refunded`.
+
+**M-Pesa:** enable M-Pesa and enter the Daraja consumer key/secret, shortcode and passkey. Select `Sandbox` or `Production`. Register `https://shop.trustedsystems.co.ke/api/payments/mpesa/callback?secret=<callback secret>` as the STK callback URL. Customers choose M-Pesa at checkout, enter their phone number and approve the STK push on their phone; the callback finalises the payment. M-Pesa bills whole shillings, so orders with cents must be paid by card.
+
+For local demos, leave Card provider on `Mock` and use `tok_demo_4242`. The currency code is `kes` (KES).
 
 ## Configuration
 
@@ -72,8 +73,8 @@ The currency code in `src/lib/checkout.ts` is `kes` (KES). If your Stripe accoun
 | `DATABASE_URL` | Internal pooled connection string (`@db:5432/store` in Docker) |
 | `APP_URL` | Canonical public origin |
 | `SESSION_SECRET` | HMAC key for session/cart cookies and mock webhook signatures (`openssl rand -base64 48`) |
-| `PAYMENT_PROVIDER` | `mock` (demo) or `stripe` |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe credentials |
+| `PAYMENT_PROVIDER`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Initial card gateway settings; editable in `/admin/payments` |
+| `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, `MPESA_SHORTCODE`, `MPESA_PASSKEY`, `MPESA_ENVIRONMENT`, `MPESA_CALLBACK_SECRET` | Initial M-Pesa settings; editable in `/admin/payments` |
 | `TUNNEL_TOKEN` | Cloudflare Tunnel token |
 
 ## Database integrity notes
@@ -105,7 +106,8 @@ src/lib/auth.ts          scrypt hashing + signed session cookies
 src/lib/catalog.ts       category tree, product queries, active-promotion SQL
 src/lib/cart.ts          guest/DB cart, snapshot pricing
 src/lib/checkout.ts      ACID checkout + idempotent payment/webhook transitions
-src/lib/payments/*       Stripe and mock providers
+src/lib/payments/*       Stripe, M-Pesa and mock providers
+src/lib/payment-config.ts  Admin-editable gateway credentials
 src/app                  App Router pages and API route handlers
 Dockerfile               deps → builder → standalone runner → migrator
 docker-compose.yml       db, migrate, app, cloudflared, optional app-local

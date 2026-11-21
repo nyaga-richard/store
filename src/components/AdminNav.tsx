@@ -10,6 +10,7 @@ const links = [
   { href: "/admin/promotions", label: "Promotions" },
   { href: "/admin/categories", label: "Categories" },
   { href: "/admin/settings", label: "Site settings" },
+  { href: "/admin/payments", label: "Payments" },
   { href: "/admin/products/new", label: "Add product" },
   { href: "/admin/customers", label: "Customers" },
   { href: "/admin/suppliers", label: "Suppliers" },
@@ -35,7 +36,7 @@ export function AdminNav({ email, displayName, role }: { email: string; displayN
       <nav className="space-y-1">
         {links.map((link) => {
           const active = link.exact ? pathname === link.href : pathname.startsWith(link.href);
-          if (link.href === "/admin/staff" && !["owner", "admin"].includes(role)) return null;
+          if (["/admin/staff", "/admin/payments"].includes(link.href) && !["owner", "admin"].includes(role)) return null;
           return (
             <Link key={link.href} href={link.href}
               className={`block rounded-lg px-3 py-2 text-sm ${active ? "bg-brand-50 font-semibold text-brand-700" : "text-slate-600 hover:bg-slate-50"}`}>

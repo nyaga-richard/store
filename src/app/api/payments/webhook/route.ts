@@ -6,11 +6,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const raw = await request.text();
-  const provider = getPaymentProvider();
+  const provider = await getPaymentProvider();
   const signature = provider.name === "Stripe"
     ? request.headers.get("stripe-signature")
     : request.headers.get("x-webhook-signature");
-  const event = provider.verifyWebhook(raw, signature);
+  const event = await provider.verifyWebhook(raw, signature);
   if (!event) return NextResponse.json({ received: false, error: "invalid_signature" }, { status: 400 });
 
   try {

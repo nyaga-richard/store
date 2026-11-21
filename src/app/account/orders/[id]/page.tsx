@@ -9,11 +9,11 @@ export const dynamic = "force-dynamic";
 
 export default async function OrderDetailPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; gateway?: string }>;
 }) {
   const user = await requireUser();
   const { id } = await params;
-  const { new: justPlaced } = await searchParams;
+  const { new: justPlaced, gateway } = await searchParams;
   const orderId = Number(id);
   if (!Number.isInteger(orderId)) notFound();
   const order = await getOrderDetail(user.customer_id, orderId);
@@ -25,6 +25,7 @@ export default async function OrderDetailPage({ params, searchParams }: {
       {justPlaced && (
         <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-800">
           <strong>Thank you!</strong> Your order has been received. Payment status: <strong>{order.payment_status || "Pending"}</strong>.
+          {gateway === "mpesa" && <p className="mt-1">Complete the M-Pesa prompt on your phone. This page updates once Safaricom confirms payment.</p>}
         </div>
       )}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">

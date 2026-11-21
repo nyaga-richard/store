@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getCart } from "@/lib/cart";
 import { query } from "@/lib/db";
 import { getPaymentProvider } from "@/lib/payments";
+import { getPaymentSettings, publicPaymentConfig } from "@/lib/payment-config";
 import type { Address, Country, PaymentMethodView, ShippingMethod } from "@/lib/types";
 import { CheckoutForm } from "@/components/CheckoutForm";
 
@@ -13,7 +14,7 @@ export default async function CheckoutPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/checkout");
 
-  const [addresses, paymentMethods, shippingMethods, countries, cart] = await Promise.all([
+  const [addresses, paymentMethods, shippingMethods, countries, cart, provider, settings] = await Promise.all([
     query<Address>(
       `SELECT a.address_id, a.address_line1, a.address_line2, a.city, a.region, a.postal_code,
               a.country_id, co.country_name, a.is_default
@@ -29,6 +30,8 @@ export default async function CheckoutPage() {
        FROM shipping_method ORDER BY shipping_method_id`),
     query<Country>(`SELECT country_id, country_name FROM country ORDER BY country_name`),
     getCart(user),
+    getPaymentProvider(),
+    getPaymentSettings(),
   ]);
 
   if (cart.lines.length === 0) redirect("/cart");
@@ -46,7 +49,8 @@ export default async function CheckoutPage() {
         countries={countries}
         cart={cart}
         userName={`${user.first_name} ${user.last_name}`}
-        provider={getPaymentProvider().name}
+        provider={provider.name}
+        paymentConfig={publicPaymentConfig(settings)}
       />
     </div>
   );

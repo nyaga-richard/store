@@ -38,7 +38,13 @@ const addressFields = z.object({
 
 export const addressSchema = addressFields;
 
+export const mpesaPhoneSchema = z.string().trim()
+  .regex(/^(?:\+?254|0)?7\d{8}$/, "Enter a valid M-Pesa number, e.g. 0712345678")
+  .max(15);
+
 export const checkoutSchema = z.object({
+  gateway: z.enum(["card", "mpesa"]).default("card"),
+  mpesaPhone: mpesaPhoneSchema.optional(),
   addressId: z.number().int().positive().optional(),
   newAddress: addressFields.optional(),
   shipping_method_id: z.number().int().positive(),
@@ -52,8 +58,12 @@ export const checkoutSchema = z.object({
 }).refine((value) => Boolean(value.addressId) !== Boolean(value.newAddress), {
   message: "Provide either a saved address or a new address",
   path: ["addressId"],
-}).refine((value) => Boolean(value.paymentMethodId) !== Boolean(value.newPaymentToken), {
-  message: "Provide either a saved payment method or a new token",
+}).refine((value) => value.gateway !== "mpesa" || Boolean(value.mpesaPhone), {
+  message: "Enter the M-Pesa phone number",
+  path: ["mpesaPhone"],
+}).refine((value) => value.gateway === "mpesa"
+  || Boolean(value.paymentMethodId) !== Boolean(value.newPaymentToken), {
+  message: "Provide either a saved card or a new card token",
   path: ["paymentMethodId"],
 });
 

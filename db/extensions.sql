@@ -64,3 +64,10 @@ CREATE TABLE IF NOT EXISTS site_setting (
   setting_value text NOT NULL,
   updated_at timestamp NOT NULL
 );
+
+-- Gateway credentials are editable in /admin/payments. Secret values never go to the browser.
+CREATE TABLE IF NOT EXISTS payment_gateway_setting (
+  setting_key varchar(100) PRIMARY KEY,
+  setting_value text NOT NULL,
+  updated_at timestamp NOT NULL
+);

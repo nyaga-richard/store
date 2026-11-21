@@ -1,5 +1,7 @@
 export type PaymentStatus = "Succeeded" | "Pending" | "Failed" | "Refunded";
 
+export type Gateway = "card" | "mpesa";
+
 export interface ChargeRequest {
   orderId: number;
   amountCents: number;
@@ -8,6 +10,7 @@ export interface ChargeRequest {
   idempotencyKey: string;
   description: string;
   customerEmail?: string;
+  customerPhone?: string;
 }
 
 export interface ChargeResult {
@@ -27,5 +30,7 @@ export interface ProviderWebhookEvent {
 export interface PaymentProvider {
   readonly name: string;
   charge(request: ChargeRequest): Promise<ChargeResult>;
-  verifyWebhook(rawBody: string, signature: string | null): ProviderWebhookEvent | null;
+  verifyWebhook(rawBody: string, signature: string | null): Promise<ProviderWebhookEvent | null>;
+  /** Precheck before an order is placed, so misconfiguration never strands a pending order. */
+  isConfigured(): Promise<boolean>;
 }

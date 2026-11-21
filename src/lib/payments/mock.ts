@@ -19,7 +19,11 @@ export const mockProvider: PaymentProvider = {
     };
   },
 
-  verifyWebhook(rawBody: string, signature: string | null): ProviderWebhookEvent | null {
+  async isConfigured(): Promise<boolean> {
+    return true;
+  },
+
+  async verifyWebhook(rawBody: string, signature: string | null): Promise<ProviderWebhookEvent | null> {
     if (!signature) return null;
     const expected = createHmac("sha256", requiredEnv("SESSION_SECRET")).update(rawBody).digest("hex");
     const a = Buffer.from(expected);
